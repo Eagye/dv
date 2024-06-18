@@ -1,0 +1,76 @@
+import os
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from PIL import Image
+from sklearn.feature_selection import SelectKBest, chi2
+
+# Define the path to the dataset
+dataset_path = r"C:\Users\eagye\Downloads\archive\Training"
+categories = ['female', 'male']
+
+# Example expected files list for each category
+expected_files = {
+    'female': ['female1.jpg', 'female2.jpg', 'female3.jpg'],
+    'male': ['male1.jpg', 'male2.jpg', 'male3.jpg']
+}
+
+# Initialize a list to hold the status of images (1 for present, 0 for missing, -1 for corrupt)
+image_status = []
+
+# Function to check if an image is corrupted
+def is_image_corrupted(file_path):
+    try:
+        img = Image.open(file_path)
+        img.verify()  # Verify that it is, indeed an image
+        return False
+    except (IOError, SyntaxError):
+        return True
+
+# Check each category directory
+for category in categories:
+    category_path = os.path.join(dataset_path, category)
+    if not os.path.isdir(category_path):
+        print(f"Directory does not exist: {category_path}")
+        continue
+    
+    files = os.listdir(category_path)
+    for file in files:
+        file_path = os.path.join(category_path, file)
+        if is_image_corrupted(file_path):
+            image_status.append(-1)  # Mark as corrupt
+        else:
+            image_status.append(1)   # Mark as present
+
+# Convert list to DataFrame for better manipulation
+df_image_status = pd.DataFrame(image_status, columns=['Image Status'])
+
+# Display the missing values
+plt.figure(figsize=(6, 4))
+sns.heatmap(df_image_status.isnull().to_numpy().reshape(1, -1), annot=True, fmt='d', cmap='coolwarm', cbar=False)
+plt.title('Missing Images')
+plt.xlabel('Expected Images')
+plt.yticks([])
+plt.show()
+
+# Impute missing values using forward fill
+df_image_status_filled = df_image_status.ffill()
+
+# Reshape the data to match the length of y
+X = df_image_status_filled.values  # Features (1 sample)
+y = pd.Series([0] * len(expected_files['female']) + [1] * len(expected_files['male']))  # Target variable (e.g., gender)
+
+# Perform feature selection using SelectKBest with chi-squared test
+k = 5  # Number of features to select
+selector = SelectKBest(score_func=chi2, k=k)
+X_selected = selector.fit_transform(X, y)
+
+# Get selected feature indices
+selected_indices = selector.get_support(indices=True)
+
+# Get selected features
+selected_features = df_image_status.columns[selected_indices]
+
+# Display selected features
+print("Selected Features:")
+print(selected_features)
